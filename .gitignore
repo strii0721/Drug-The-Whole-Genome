@@ -5,3 +5,4 @@ data
 *.txt
 test*
 logs
+tmp
