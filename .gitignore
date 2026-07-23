@@ -2,7 +2,7 @@
 **/**/__pycache__/
 data
 **/py_scripts
-*.txt
+output
 test*
 logs
 tmp
