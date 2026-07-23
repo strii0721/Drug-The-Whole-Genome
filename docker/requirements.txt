@@ -1,10 +1,14 @@
 # =============================================
 # Lightning
 # =============================================
-torch>=2.1.2
-torchvision>=0.16.2
-torchaudio>=2.1.2
-lightning==2.2.0.rc0
+# NOTE: torch / torchvision / torchaudio are installed via conda in the
+# Dockerfile (pytorch==2.1.2, pytorch-cuda==12.1). Do NOT reinstall with pip
+# here — pip would overwrite the conda CUDA build and break faiss-gpu.
+# If you run without Docker, uncomment the three lines below.
+# torch>=2.1.2
+# torchvision>=0.16.2
+# torchaudio>=2.1.2
+lightning==2.2.0
 torchmetrics
 
 # =============================================
@@ -40,7 +44,7 @@ nanopq
 # =============================================
 # Nautral Language Processing
 # =============================================
-transformers
+transformers==4.36.0
 # spacy           # for text preprocessing
 
 # =============================================
@@ -50,6 +54,7 @@ biotite==0.37.0
 biopython==1.81
 rdkit==2023.9.5
 biopandas
+h5py            # required by unimol/tasks/drugclip.py (import h5py); missing in original list
 # https://github.com/dptech-corp/Uni-Core/releases/download/0.0.2/unicore-0.0.1+cu117torch1.13.1-cp39-cp39-linux_x86_64.whl
 
 # =============================================

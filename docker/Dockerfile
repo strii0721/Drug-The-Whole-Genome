@@ -38,14 +38,17 @@ RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-
     && rm -rf /var/lib/apt/lists/*
 
 
-# Install Miniconda & use Python 3.9
-RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/install-conda.sh \
+# Install Miniconda (pinned to a Python 3.9 build).
+# NOTE: "Miniconda3-latest" no longer resolves `conda install python=3.9`
+# (its meta-packages require newer Python), so we pin a py39 installer.
+# NOTE: `conda tos accept` was removed in modern conda (24.x); the pinned
+# py39 installer does not ship the `conda-tos` plugin, so ToS is never
+# prompted and these lines must be omitted.
+ARG MINICONDA=Miniconda3-py39_24.5.0-0-Linux-x86_64.sh
+RUN wget https://repo.anaconda.com/miniconda/${MINICONDA} -O /tmp/install-conda.sh \
     && chmod +x /tmp/install-conda.sh \
     && bash /tmp/install-conda.sh -b -f -p /usr/local \
     && rm -f /tmp/install-conda.sh \
-    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
-    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r \
-    && conda install -y python=${PYTHON_VERSION} \
     && conda clean -y --all
 
 # ==================================================
@@ -124,13 +127,12 @@ EOT
 
 
 
-# Install Pytorch 1.12.1
+# Install Pytorch 2.1.2
 # you can find other versions and installation commands from:
 # https://pytorch.org/get-started/previous-versions/
 # https://github.com/pytorch/pytorch/wiki/PyTorch-Versions
-RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
-    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r \
-    && conda install -y \
+# NOTE: `conda tos accept` removed in conda 24.x; omitted.
+RUN conda install -y \
     pytorch==2.1.2 \
     torchvision==0.16.2 \
     torchaudio==2.1.2 \
@@ -139,6 +141,10 @@ RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkg
     -c pytorch -c nvidia -c conda-forge \
     && conda clean -afy
 # Install Uni-core
+# NOTE: Uni-Core's setup.py pulls `wandb` -> `pydantic` (2.x), which requires
+# typing-extensions>=4.15.0. The conda pytorch install drops typing-extensions
+# 4.14.1, so pip fails to resolve during `python setup.py install` (exit 1).
+# Bump it here first; 4.15.x is backward-compatible with torch 2.1.2 (needs >=4.8.0).
 RUN pip install --no-cache-dir \
     iopath \
     lmdb \
@@ -147,11 +153,18 @@ RUN pip install --no-cache-dir \
     scipy \
     tensorboardX \
     tqdm \
-    tokenizers
+    tokenizers \
+    "typing-extensions>=4.15.0"
 
+# NOTE: `python setup.py install` resolves install_requires via the legacy
+# easy_install, which cannot build modern PEP 517 sdists (pydantic-core 2.47.0
+# ships a pyproject-based sdist with no top-level setup.py -> "Couldn't find a
+# setup script"). Use pip instead. `--no-build-isolation` is REQUIRED because
+# Uni-Core's setup.py does `import torch` at module top, so the build needs the
+# already-installed torch from the current env (not an isolated build env).
 RUN git clone https://github.com/dptech-corp/Uni-Core.git /tmp/Uni-core \
     && cd /tmp/Uni-core \
-    && python setup.py install \
+    && pip install --no-build-isolation . \
     && rm -rf /tmp/Uni-core
 
 
