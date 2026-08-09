@@ -5,8 +5,9 @@ Build DrugCLIP training LMDB from PDBbind raw data.
 Produces:
   {output_dir}/train.lmdb   -- training set
   {output_dir}/valid.lmdb   -- validation set
-  {output_dir}/dict_mol.txt -- molecule atom-type dictionary
-  {output_dir}/dict_pkt.txt -- pocket atom-type dictionary
+  ./resources/dict/dict_mol.txt -- molecule atom-type dictionary
+  ./resources/dict/dict_pkt.txt -- pocket atom-type dictionary
+  (dictionary files always live in ./resources/dict/, kept if already present)
 
 Each LMDB entry is a pickle-serialised dict:
     smi               : SMILES string
@@ -19,8 +20,8 @@ Each LMDB entry is a pickle-serialised dict:
 
 Usage:
     python build_train_lmdb.py \
-        --data_root ./data/pdbbind_raw \
-        --output_dir ./data/train_data \
+        --data_root ./resources/datasets/PDBbind+ \
+        --output_dir ./resources/datasets/PDBbind_train \
         --train_ratio 0.9
 """
 
@@ -30,7 +31,6 @@ import os
 import pickle
 import re
 import sys
-import shutil
 from collections import defaultdict
 from typing import Optional
 from multiprocessing import Pool, cpu_count
@@ -345,11 +345,11 @@ def _process_one(comp: dict):
 def main():
     parser = argparse.ArgumentParser(description="Build DrugCLIP training LMDB from PDBbind")
     parser.add_argument(
-        "--data_root", type=str, default="./data/pdbbind_raw",
+        "--data_root", type=str, default="./resources/datasets/PDBbind+",
         help="root directory of PDBbind raw data (contains index/ and P-L/)"
     )
     parser.add_argument(
-        "--output_dir", type=str, default="./data/pdbbind_train",
+        "--output_dir", type=str, default="./resources/datasets/PDBbind_train",
         help="output directory for LMDB files and dictionaries"
     )
     parser.add_argument(
@@ -452,27 +452,25 @@ def main():
     logger.info(f"Writing {valid_path} ...")
     write_lmdb(valid_entries, valid_path)
 
-    # ---- 7. copy / write dictionary files -----------------------------------
-    # Use the existing dict files in ./dict/ if available, otherwise write new ones
-    src_dict_mol = os.path.join(os.path.dirname(__file__), "dict", "dict_mol.txt")
-    src_dict_pkt = os.path.join(os.path.dirname(__file__), "dict", "dict_pkt.txt")
+    # ---- 7. ensure dictionary files in ./resources/dict/ ---------------------
+    # The dictionaries are shared project-wide and always live under the
+    # project's ./resources/dict/ directory (regardless of output_dir).
+    # Keep the files if they already exist; otherwise write the defaults.
+    dict_dir = os.path.join(
+        os.path.dirname(__file__), "..", "resources", "dict"
+    )
+    dict_paths = [
+        (os.path.join(dict_dir, "dict_mol.txt"), MOL_DICT),
+        (os.path.join(dict_dir, "dict_pkt.txt"), PKT_DICT),
+    ]
 
-    dst_dict_mol = os.path.join(args.output_dir, "dict_mol.txt")
-    dst_dict_pkt = os.path.join(args.output_dir, "dict_pkt.txt")
-
-    if os.path.isfile(src_dict_mol):
-        shutil.copy2(src_dict_mol, dst_dict_mol)
-        logger.info(f"Copied dict_mol.txt from {src_dict_mol}")
-    else:
-        write_dict_txt(dst_dict_mol, MOL_DICT)
-        logger.info("Wrote default dict_mol.txt")
-
-    if os.path.isfile(src_dict_pkt):
-        shutil.copy2(src_dict_pkt, dst_dict_pkt)
-        logger.info(f"Copied dict_pkt.txt from {src_dict_pkt}")
-    else:
-        write_dict_txt(dst_dict_pkt, PKT_DICT)
-        logger.info("Wrote default dict_pkt.txt")
+    for dict_path, default_dict in dict_paths:
+        if os.path.isfile(dict_path):
+            logger.info(f"Keeping existing {dict_path}")
+        else:
+            os.makedirs(dict_dir, exist_ok=True)
+            write_dict_txt(dict_path, default_dict)
+            logger.info(f"Wrote default {dict_path}")
 
     logger.info("Done.")
 

@@ -1,0 +1,23 @@
+# Docker Compose for Drug-The-Whole-Genome (dtwg)
+# 等价于 scripts/build_container.sh:
+#   docker run --gpus all -v $(pwd):/project --ipc=host -it dtwg:latest bash
+# 用法: docker compose up  (进入容器 shell)
+
+services:
+  dtwg:
+    image: dtwg:latest
+    working_dir: /project
+    network_mode: host      # 共享宿主网络栈（含 ConnectX-7 10.100.0.0 网卡），供双机 NCCL 通信
+    ipc: host               # 共享宿主 IPC 命名空间（/dev/shm），供 PyTorch DataLoader 多进程使用
+    volumes:
+      - .:/project          # 挂载整个项目（含 resources/ 数据与权重，不入镜像）
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true        # -i 保持 stdin
+    tty: true               # -t 分配伪终端
+    command: bash           # 默认进入 bash；也可覆盖为其它命令

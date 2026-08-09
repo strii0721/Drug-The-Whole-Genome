@@ -1,5 +1,5 @@
 
-data_path="./data/pdbbind_train"
+data_path="./resources/datasets/PDBbind_train"
 
 save_dir="./output/pretrain/$(date +"%Y-%m-%d_%H-%M-%S")/"
 tmp_save_dir="./output/pretrain/tmp/$(date +"%Y-%m-%d_%H-%M-%S")/"
@@ -8,8 +8,8 @@ tsb_dir="./output/pretrain/tsb_dir/$(date +"%Y-%m-%d_%H-%M-%S")/"
 n_gpu=8
 # n_gpu=4  # multi-GPU
 MASTER_PORT=10055
-finetune_mol_model="./data/model_weights/unimol/mol_pre_no_h_220816.pt"
-finetune_pocket_model="./data/model_weights/unimol/pocket_pre_220816.pt"
+finetune_mol_model="./resources/model_weights/unimol/mol_pre_no_h_220816.pt"
+finetune_pocket_model="./resources/model_weights/unimol/pocket_pre_220816.pt"
 
 batch_size=18
 batch_size_valid=18
@@ -27,9 +27,9 @@ exec > >(tee "logs/pretrain/$(date +%s).log") 2>&1
 export NCCL_ASYNC_ERROR_HANDLING=1
 export OMP_NUM_THREADS=1
 # single-GPU:
-# CUDA_VISIBLE_DEVICES="0" torchrun --nproc_per_node=$n_gpu --master_port=$MASTER_PORT $(which unicore-train) $data_path --user-dir ./unimol --train-subset train --valid-subset valid \
+# CUDA_VISIBLE_DEVICES="0" torchrun --nproc_per_node=$n_gpu --master_port=$MASTER_PORT $(which unicore-train) $data_path --user-dir ./src/unimol --train-subset train --valid-subset valid \
 # multi-GPU (e.g. n_gpu=4, CUDA_VISIBLE_DEVICES="0,1,2,3"):
-CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" torchrun --nproc_per_node=$n_gpu --master_port=$MASTER_PORT $(which unicore-train) $data_path --user-dir ./unimol --train-subset train --valid-subset valid \
+CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" torchrun --nproc_per_node=$n_gpu --master_port=$MASTER_PORT $(which unicore-train) $data_path --user-dir ./src/unimol --train-subset train --valid-subset valid \
        --num-workers 8 --ddp-backend=c10d \
        --task drugclip --loss in_batch_softmax --arch drugclip  \
        --max-pocket-atoms 256 \

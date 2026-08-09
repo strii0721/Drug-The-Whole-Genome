@@ -172,8 +172,8 @@ class DrugCLIP(UnicoreTask):
 
     @classmethod
     def setup_task(cls, args, **kwargs):
-        mol_dictionary = Dictionary.load(os.path.join(args.data, "dict_mol.txt"))
-        pocket_dictionary = Dictionary.load(os.path.join(args.data, "dict_pkt.txt"))
+        mol_dictionary = Dictionary.load("./resources/dict/dict_mol.txt")
+        pocket_dictionary = Dictionary.load("./resources/dict/dict_pkt.txt")
         logger.info("ligand dictionary: {} types".format(len(mol_dictionary)))
         logger.info("pocket dictionary: {} types".format(len(pocket_dictionary)))
         return cls(args, mol_dictionary, pocket_dictionary)
