@@ -5,7 +5,7 @@
 
 services:
   dtwg:
-    image: dtwg:latest
+    image: endfield.local:5000/dtwg:1.0.0
     working_dir: /project
     network_mode: host      # 共享宿主网络栈（含 ConnectX-7 10.100.0.0 网卡），供双机 NCCL 通信
     ipc: host               # 共享宿主 IPC 命名空间（/dev/shm），供 PyTorch DataLoader 多进程使用

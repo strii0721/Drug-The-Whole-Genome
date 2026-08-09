@@ -1,55 +1,55 @@
 # syntax=docker/dockerfile:1.4
 
-# =============================================================================
-# DrugCLIP (Drug-The-Whole-Genome) — arm64 / DGX Spark (GB10, sm_121) 适配
-# 依据 _repro_report_arm64_compat.md：
-#   - 原 nvidia/cuda:12.1.1-cudnn8-devel-ubuntu20.04 + conda(py3.9 / pytorch 2.1.2)
-#     在 aarch64 上无法构建/运行（pytorch 官方 conda 通道无 linux-aarch64 构建）
-#   - 改用官方 python:3.11-slim-bookworm（multi-arch）+ 纯 pip（cu130 索引）
-#   - torch 2.9.1+cu130 轮子自带 CUDA 库，容器内无需 CUDA toolkit/cudnn，
-#     host driver >= 580 即可（DGX Spark 580.173.02 满足）
-# =============================================================================
-FROM python:3.11-slim-bookworm
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu20.04
 ARG http_proxy
 ARG https_proxy
+ARG python=3.9
 # Set default RUN shell to /bin/bash
 SHELL ["/bin/bash", "-cu"]
 
 
 # Set environment variables
-# TORCH_CUDA_ARCH_LIST=12.1 对应 GB10 sm_121；pip 轮子预编译，仅编译扩展时生效
 ENV LANG=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
-    TORCH_CUDA_ARCH_LIST="12.1"
+    PYTHON_VERSION=${python} \
+    TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6"
 
 # 配置国内 apt 源
-# arm64 说明：python:3.11-slim-bookworm 是 Debian（arm64 为官方架构，主源即
-# deb.debian.org，无需 Ubuntu 的 ports.ubuntu.com 之分）。原 archive.ubuntu.com
-# 的 sed 仅适用于 x86 Ubuntu 基础镜像，对 arm64/Bookworm 已失效，改为 Debian 源。
-# 若网络可达官方源，可注释掉本段。
-RUN sed -i 's@http://deb.debian.org/debian@http://mirrors.tuna.tsinghua.edu.cn/debian@g' /etc/apt/sources.list.d/debian.sources \
-    && sed -i 's@http://security.debian.org/debian-security@http://mirrors.tuna.tsinghua.edu.cn/debian-security@g' /etc/apt/sources.list.d/debian.sources
-
+RUN sed -i 's@//.*archive.ubuntu.com@//mirrors.aliyun.com@g' /etc/apt/sources.list \
+    && sed -i 's@//.*security.ubuntu.com@//mirrors.aliyun.com@g' /etc/apt/sources.list
 # Install basic packages for compiling and building
-# g++-7 已从 bookworm 移除，直接删除；RDMA 用 bookworm 包名
-# libibverbs-dev / ibverbs-providers（双机 NCCL RDMA 用）
 RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-packages --no-install-recommends \
     build-essential \
     cmake \
+    g++-7 \
     git \
     curl \
     wget \
     ca-certificates \
     libjpeg-dev \
     libpng-dev \
-    libibverbs-dev \
+    librdmacm1 \
+    libibverbs1 \
     ibverbs-providers \
     tzdata \
-    libgl1 \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
+
+# Install Miniconda (pinned to a Python 3.9 build).
+# NOTE: "Miniconda3-latest" no longer resolves `conda install python=3.9`
+# (its meta-packages require newer Python), so we pin a py39 installer.
+# NOTE: `conda tos accept` was removed in modern conda (24.x); the pinned
+# py39 installer does not ship the `conda-tos` plugin, so ToS is never
+# prompted and these lines must be omitted.
+ARG MINICONDA=Miniconda3-py39_24.5.0-0-Linux-x86_64.sh
+RUN wget https://repo.anaconda.com/miniconda/${MINICONDA} -O /tmp/install-conda.sh \
+    && chmod +x /tmp/install-conda.sh \
+    && bash /tmp/install-conda.sh -b -f -p /usr/local \
+    && rm -f /tmp/install-conda.sh \
+    && conda clean -y --all
 
 # ==================================================
 # *Tools installation (optional)
@@ -61,7 +61,6 @@ RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-
 
 
 # Install basic packages
-# NOTE: language-pack-en 是 Ubuntu 专有包，Debian bookworm 不存在，改用 locales
 RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-packages --no-install-recommends \
     zsh \
     vim \
@@ -69,7 +68,7 @@ RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-
     unzip \
     rsync \
     htop \
-    locales \
+    language-pack-en \
     nethogs \
     sysstat \
     gnupg \
@@ -83,56 +82,78 @@ RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-
 
 
 # ==================================================
-# *Fonts installation  (disabled)
+# *Fonts installation
 #
-# NOTE: raw.githubusercontent.com 在鲸鱼网络环境不可达，此段会导致构建卡死；
-# 字体仅用于画图，非关键依赖。需要时恢复（去掉 RUN 前的 #）即可。
 # Install fonts that are commonly used in plotting.
 # Question: "Which font looks best in a scientific figure?"
 # Answer: "Arial or Helvetica, always."
 # https://pubs.acs.org/doi/10.1021/acs.chemmater.6b00306
 # ==================================================
 
-# RUN cd /tmp \
-#     && wget https://github.com/hughplay/memo/raw/master/code/snippet/drawing/plot_fonts.tar.gz \
-#     && tar zxvf plot_fonts.tar.gz \
-#     && cp plot_fonts/* /usr/share/fonts/truetype/ \
-#     && rm -rf plot_fonts.tar.gz plot_fonts \
-#     && fc-cache -fv
+RUN cd /tmp \
+    && wget https://github.com/hughplay/memo/raw/master/code/snippet/drawing/plot_fonts.tar.gz \
+    && tar zxvf plot_fonts.tar.gz \
+    && cp plot_fonts/* /usr/share/fonts/truetype/ \
+    && rm -rf plot_fonts.tar.gz plot_fonts \
+    && fc-cache -fv
 
 # ==================================================
 # Install python packages
 # ==================================================
 
 # Setup TUNA mirror (optional)
-# 保留作 requirements.txt 安装的默认源；下方 torch 段用显式 --index-url 覆盖
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+RUN cat <<EOT >> ~/.condarc
+channels:
+  - defaults
+show_channel_urls: true
+channel_alias: https://mirrors.tuna.tsinghua.edu.cn/anaconda
+default_channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/pro
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
+custom_channels:
+  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  msys2: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  bioconda: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  menpo: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  pytorch: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  simpleitk: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  nvidia: https://mirrors.sustech.edu.cn/anaconda-extra/cloud
+EOT
 
 
-# Install PyTorch 2.9.1 (cu130) — arm64 / DGX Spark 官方推荐路径
-# 说明：pip 轮子自带 CUDA 库（nvidia-* 依赖），容器内无需 CUDA toolkit/cudnn，
-# 只需 host driver >= 580。aarch64 上 2.7.x 无任何 CUDA 轮子，最低 2.8.0+cu129；
-# NVIDIA 官方对 DGX Spark 的推荐为：
-#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu130 \
-    torch==2.9.1+cu130 \
-    torchvision==0.24.1 \
-    torchaudio==2.9.1
 
-# Install Uni-core 前置依赖
+
+# Install Pytorch 2.1.2
+# you can find other versions and installation commands from:
+# https://pytorch.org/get-started/previous-versions/
+# https://github.com/pytorch/pytorch/wiki/PyTorch-Versions
+# NOTE: `conda tos accept` removed in conda 24.x; omitted.
+RUN conda install -y \
+    pytorch==2.1.2 \
+    torchvision==0.16.2 \
+    torchaudio==2.1.2 \
+    pytorch-cuda==12.1 \
+    faiss-gpu=1.8.0 \
+    -c pytorch -c nvidia -c conda-forge \
+    && conda clean -afy
+# Install Uni-core
 # NOTE: Uni-Core's setup.py pulls `wandb` -> `pydantic` (2.x), which requires
-# typing-extensions>=4.15.0。
-# tokenizers 必须 pin 0.20.3：py311 + aarch64 仅 0.20.3 有轮子（0.21+ 只有 cp310），
-# 不 pin 会触发 Rust 源码编译（甚至失败）。
-# numpy 必须 pin 1.26.4：pandas 1.5.3 / scipy 1.10.1 与 numpy 2.x 不兼容。
+# typing-extensions>=4.15.0. The conda pytorch install drops typing-extensions
+# 4.14.1, so pip fails to resolve during `python setup.py install` (exit 1).
+# Bump it here first; 4.15.x is backward-compatible with torch 2.1.2 (needs >=4.8.0).
 RUN pip install --no-cache-dir \
-    numpy==1.26.4 \
+    iopath \
     lmdb \
     ml_collections \
+    numpy \
+    scipy \
     tensorboardX \
     tqdm \
-    tokenizers==0.20.3 \
-    zstandard \
+    tokenizers \
     "typing-extensions>=4.15.0"
 
 # NOTE: `python setup.py install` resolves install_requires via the legacy
@@ -141,7 +162,6 @@ RUN pip install --no-cache-dir \
 # setup script"). Use pip instead. `--no-build-isolation` is REQUIRED because
 # Uni-Core's setup.py does `import torch` at module top, so the build needs the
 # already-installed torch from the current env (not an isolated build env).
-# DISABLE_CUDA_EXTENSION=True 默认生效 -> 纯 Python 安装，aarch64 无需 nvcc
 RUN git clone https://github.com/dptech-corp/Uni-Core.git /tmp/Uni-core \
     && cd /tmp/Uni-core \
     && pip install --no-build-isolation . \
@@ -149,10 +169,13 @@ RUN git clone https://github.com/dptech-corp/Uni-Core.git /tmp/Uni-core \
 
 
 # By default, install packages from `requirements.txt` with pip.
-# torch 已由上方 cu130 索引安装（requirements.txt 顶部有 arm64 说明，勿重装）
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && rm -f /tmp/requirements.txt
+
+# Another way is installing packages from a `env.yaml` with conda.
+# COPY env.yaml /tmp/env.yaml
+# RUN conda env create -f /tmp/env.yaml && rm -f /tmp/env.yaml
 
 
 # ==================================================
@@ -162,6 +185,9 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt \
 # prevent many privileges issues.
 # ==================================================
 
+
+# TUNA mirror for apt
+# RUN sed -i -e 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
 
 # Add a user with the same UID and GID as the host user, to prevent privilege issues.
 # ARG USER_ID=1011
