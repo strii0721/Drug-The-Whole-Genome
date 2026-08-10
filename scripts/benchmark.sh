@@ -1,18 +1,24 @@
 TASK="PCBA" # DUDE or PCBA
 
 results_path="output/test_$TASK"  # auto-generated from TASK name
-batch_size=12
+batch_size=64
 
-weight_path="./output/pretrain/2026-07-24_03-16-10/checkpoint_best.pt"
+# 临时用官方权重跑通验证；新训练权重到位后改回 drug_clip_re/checkpoint_best.pt
+weight_path="./resources/model_weights/drug_clip/6_folds/fold_0.pt"
 use_folds=False
 
-CUDA_VISIBLE_DEVICES="0" python ./unimol/test.py --user-dir ./unimol "./dict" --valid-subset test \
+log_dir="output/benchmark"
+mkdir -p $log_dir
+log_file="$log_dir/${TASK}-$(date +%Y-%m-%d_%H-%M-%S).log"
+
+CUDA_VISIBLE_DEVICES="0" python ./src/unimol/test.py --user-dir ./src/unimol "./resources/dict" --valid-subset test \
        --results-path $results_path \
        --num-workers 8 --ddp-backend=c10d --batch-size $batch_size \
        --task drugclip --loss in_batch_softmax --arch drugclip  \
        --fp16 --fp16-init-scale 4 --fp16-scale-window 256  --seed 1 \
        --use-folds $use_folds \
        --path $weight_path \
+       --benchmark-data-dir ./data \
        --log-interval 100 --log-format simple \
-       --max-pocket-atoms 511 \
-       --test-task $TASK \
+       --max-pocket-atoms 256 \
+       --test-task $TASK 2>&1 | tee $log_file

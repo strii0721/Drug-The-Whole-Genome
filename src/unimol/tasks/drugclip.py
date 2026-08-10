@@ -157,6 +157,12 @@ class DrugCLIP(UnicoreTask):
             type=Boolean,
             help="whether test model",
         )
+        parser.add_argument(
+            "--benchmark-data-dir",
+            default="./data",
+            type=str,
+            help="benchmark data root dir (DUD-E / lit_pcba / model_weights)",
+        )
         parser.add_argument("--reg", action="store_true", help="regression task")
 
     def __init__(self, args, dictionary, pocket_dictionary):
@@ -795,10 +801,10 @@ class DrugCLIP(UnicoreTask):
     def test_pcba_target_ensemble(self, target, model, **kwargs):
 
 
-        data_path = "./data/lit_pcba/" + target + "/mols.lmdb"
+        data_path = os.path.join(self.args.benchmark_data_dir, "lit_pcba", target, "mols.lmdb")
         mol_dataset = self.load_mols_dataset(data_path, "atoms", "coordinates")
         num_data = len(mol_dataset)
-        bsz=512
+        bsz = self.args.batch_size
         print(num_data//bsz)
         
         
@@ -809,7 +815,7 @@ class DrugCLIP(UnicoreTask):
 
         # 6 folds
 
-        ckpts = [f"./data/model_weights/6_folds/fold_{i}.pt" for i in range(6)]
+        ckpts = [os.path.join(self.args.benchmark_data_dir, "model_weights", "6_folds", f"fold_{i}.pt") for i in range(6)]
 
         res_list = []
         for fold, ckpt in enumerate(ckpts[:6]):
@@ -850,7 +856,7 @@ class DrugCLIP(UnicoreTask):
             labels = np.array(labels, dtype=np.int32)
             # labels = np.zeros(num_data)
             # generate pocket data
-            data_path = "./data/lit_pcba/" + target + "/pockets.lmdb"
+            data_path = os.path.join(self.args.benchmark_data_dir, "lit_pcba", target, "pockets.lmdb")
             if not os.path.exists(data_path):
                 return None
             pocket_dataset = self.load_pockets_dataset(data_path)
@@ -928,7 +934,7 @@ class DrugCLIP(UnicoreTask):
         """Encode a dataset with the molecule encoder."""
 
         #names = "PPARG"
-        data_path = "./data/lit_pcba/" + name + "/mols.lmdb"
+        data_path = os.path.join(self.args.benchmark_data_dir, "lit_pcba", name, "mols.lmdb")
         mol_dataset = self.load_mols_dataset(data_path, "atoms", "coordinates")
         num_data = len(mol_dataset)
         bsz=512
@@ -968,7 +974,7 @@ class DrugCLIP(UnicoreTask):
         mol_reps = np.concatenate(mol_reps, axis=0)
         labels = np.array(labels, dtype=np.int32)
         # generate pocket data
-        data_path = "./data/lit_pcba/" + name + "/pockets.lmdb"
+        data_path = os.path.join(self.args.benchmark_data_dir, "lit_pcba", name, "pockets.lmdb")
         pocket_dataset = self.load_pockets_dataset(data_path)
         pocket_data = torch.utils.data.DataLoader(pocket_dataset, batch_size=bsz, collate_fn=pocket_dataset.collater)
         pocket_reps = []
@@ -1016,7 +1022,7 @@ class DrugCLIP(UnicoreTask):
     def test_pcba(self, model, use_folds=True, **kwargs):
 
         use_folds = False
-        targets = os.listdir("./data/lit_pcba/")
+        targets = os.listdir(os.path.join(self.args.benchmark_data_dir, "lit_pcba"))
 
         #print(targets)
         auc_list = []
@@ -1062,7 +1068,7 @@ class DrugCLIP(UnicoreTask):
     
     def test_dude_target(self, target, model, **kwargs):
 
-        data_path = "./data/DUD-E/" + target + "/mols.lmdb"
+        data_path = os.path.join(self.args.benchmark_data_dir, "DUD-E", target, "mols.lmdb")
         if not os.path.exists(data_path):
             return None
         mol_dataset = self.load_mols_dataset(data_path, "atoms", "coordinates")
@@ -1165,7 +1171,7 @@ class DrugCLIP(UnicoreTask):
 
        
    
-        data_path = "./data/DUD-E/" + target + "/mols.lmdb"
+        data_path = os.path.join(self.args.benchmark_data_dir, "DUD-E", target, "mols.lmdb")
         if not os.path.exists(data_path):
             return None
         mol_dataset = self.load_mols_dataset(data_path, "atoms", "coordinates")
@@ -1180,7 +1186,7 @@ class DrugCLIP(UnicoreTask):
 
         # 6 folds
 
-        ckpts = [f"./data/model_weights/6_folds/fold_{i}.pt" for i in range(6)]
+        ckpts = [os.path.join(self.args.benchmark_data_dir, "model_weights", "6_folds", f"fold_{i}.pt") for i in range(6)]
 
 
 
@@ -1223,7 +1229,7 @@ class DrugCLIP(UnicoreTask):
             labels = np.array(labels, dtype=np.int32)
             # generate pocket data
             #data_path = "./data/DUD-E/" + target + "/RealProtein_RealPocket/pockets.lmdb"
-            data_path = "./data/DUD-E/" + target + "/pocket.lmdb"
+            data_path = os.path.join(self.args.benchmark_data_dir, "DUD-E", target, "pocket.lmdb")
             if not os.path.exists(data_path):
                 return None
             pocket_dataset = self.load_pockets_dataset(data_path)
@@ -1471,7 +1477,7 @@ class DrugCLIP(UnicoreTask):
 
         # 6 folds
         
-        ckpts = [f"./data/model_weights/6_folds/fold_{i}.pt" for i in range(6)]
+        ckpts = [os.path.join(self.args.benchmark_data_dir, "model_weights", "6_folds", f"fold_{i}.pt") for i in range(6)]
 
         if dataset_type is None:
             dataset_type = 2 if os.path.isdir(mol_path) else 1
@@ -1613,7 +1619,7 @@ class DrugCLIP(UnicoreTask):
     def encode_pockets_multi_folds(self, model, pocket_dir, pocket_path, **kwargs):
         print(pocket_path)
         # 6 folds
-        ckpts = [f"./data/model_weights/6_folds/fold_{i}.pt" for i in range(6)]
+        ckpts = [os.path.join(self.args.benchmark_data_dir, "model_weights", "6_folds", f"fold_{i}.pt") for i in range(6)]
 
 
         #ckpts = ckpts[:1]
@@ -1685,7 +1691,7 @@ class DrugCLIP(UnicoreTask):
 
         if fold_version=="6_folds":
             # 6 folds
-            ckpts = [f"./data/model_weights/6_folds/fold_{i}.pt" for i in range(6)]
+            ckpts = [os.path.join(self.args.benchmark_data_dir, "model_weights", "6_folds", f"fold_{i}.pt") for i in range(6)]
 
             caches = [f"./data/encoded_mol_embs/6_folds/fold{i}.pkl" for i in range(6)]
         
@@ -1695,7 +1701,7 @@ class DrugCLIP(UnicoreTask):
 
             caches = [f"./data/encoded_mol_embs/8_folds/fold{i}.pkl" for i in range(8)]
         elif fold_version=="6_folds_filtered":
-            ckpts = [f"./data/model_weights/6_folds/fold_{i}.pt" for i in range(6)]
+            ckpts = [os.path.join(self.args.benchmark_data_dir, "model_weights", "6_folds", f"fold_{i}.pt") for i in range(6)]
 
             caches = [f"./data/encoded_mol_embs/6_folds_filtered/fold{i}.pkl" for i in range(6)]
 

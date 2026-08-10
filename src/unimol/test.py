@@ -4,6 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import argparse
 import logging
 import os
 import sys
@@ -65,13 +66,24 @@ def main(args):
         task.test_pcba(model, use_folds = args.use_folds)
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 def cli_main():
     # add args
     
 
     parser = options.get_validation_parser()
     parser.add_argument("--test-task", type=str, default="DUDE", help="test task", choices=["DUDE", "PCBA"])
-    parser.add_argument("--use-folds", type=str, default=True, help="use 6 folds weights")
+    parser.add_argument("--use-folds", type=str2bool, default=True, help="use 6 folds weights")
     options.add_model_args(parser)
     args = options.parse_args_and_arch(parser)
 
