@@ -2,11 +2,15 @@
 # ============================================
 # 双机多机版（blue-whale + sperm-whale）
 # 两只鲸鱼各 1 张 NVIDIA GB10（aarch64），经 ConnectX-7 直连：
-#   blue-whale   = 10.100.0.1
-#   sperm-whale  = 10.100.0.3
-#   NCCL 专用接口: enp1s0f0np0
-# 两机各跑同一条命令；数据/代码在两机各备一份（scripts/sync_to_whales.sh）。
-# 两机直接跑同一条命令，torchrun 自动分配 rank；先启动的节点成为 rank0（建议 blue-whale 先启动）。
+#   sperm-whale  = 10.100.0.3  (rank0, ConnectX-7)
+#   blue-whale   = 10.100.0.1  (rank1, ConnectX-7)
+#   控制面（master_addr/TCPStore）走普通局域网 192.168.0.202（sperm-whale）
+#   NCCL 数据面走 ConnectX-7: NCCL_SOCKET_IFNAME=enp1s0f0np0
+# 两机命令不同：
+#   sperm-whale: bash scripts/pretrain.sh               (rank0, 先启动)
+#   blue-whale : NODE_RANK=1 bash scripts/pretrain.sh   (rank1)
+# 注：容器 + ConnectX-7 环境实测 rdzv 模式不可用，故用 master_addr/master_port
+# 静态模式（TCPStore），node_rank 由 NODE_RANK 环境变量指定，默认 0。
 # ============================================
 data_path="./resources/datasets/PDBbind_train"
 
@@ -16,18 +20,20 @@ tsb_dir="./output/pretrain/tsb_dir/$(date +"%Y-%m-%d_%H-%M-%S")/"
 
 # 每机 1 卡（GB10 单卡）
 n_gpu=1
-# 多机参数：默认 2 节点，RANK0 为 blue-whale（10.100.0.1）
+# 多机参数：默认 2 节点；MASTER 为 sperm-whale，控制面走普通局域网 192.168.0.202
+# （NCCL 数据面仍走 ConnectX-7，见下方 NCCL_SOCKET_IFNAME）
 # 单机冒烟：NNODES=1 bash scripts/pretrain.sh
 NNODES=${NNODES:-2}
-RANK0_IP=10.100.0.1
+RANK0_IP=192.168.0.202
 MASTER_PORT=10055
 # NCCL 走 ConnectX-7 专用接口（enp1s0f0np0），防止误走其它网卡
 export NCCL_SOCKET_IFNAME=enp1s0f0np0
 finetune_mol_model="./resources/model_weights/unimol/mol_pre_no_h_220816.pt"
 finetune_pocket_model="./resources/model_weights/unimol/pocket_pre_220816.pt"
 
-batch_size=18
-batch_size_valid=18
+# 双机全局 batch 对齐论文 144=72×2；GB10 128GB 显存充足
+batch_size=72
+batch_size_valid=72
 epoch=200
 dropout=0.0
 warmup=0.06
@@ -41,11 +47,12 @@ exec > >(tee "logs/pretrain/$(date +%s).log") 2>&1
 
 export NCCL_ASYNC_ERROR_HANDLING=1
 export OMP_NUM_THREADS=1
-# 启动模式切换：NNODES>=2 为双机多机（两机各跑同一条命令，torchrun 自动分配 rank，
-# RANK0/blue-whale 自动拉起 c10d rendezvous）；NNODES=1 为单机冒烟
+# 启动模式切换：NNODES>=2 为双机多机（master_addr/master_port 静态 TCPStore 模式，
+# 实测 rdzv 在容器+ConnectX-7 环境不可用；node_rank 用 NODE_RANK 环境变量指定，
+# 默认 0=sperm-whale，blue-whale 用 NODE_RANK=1）；NNODES=1 为单机冒烟
 # （master_addr 默认 127.0.0.1）。切换方式：NNODES=1 bash scripts/pretrain.sh
 if [[ "$NNODES" -ge 2 ]]; then
-    LAUNCH_ARGS="--nnodes=$NNODES --nproc_per_node=$n_gpu --rdzv_endpoint=$RANK0_IP:$MASTER_PORT --rdzv_backend=c10d"
+    LAUNCH_ARGS="--nnodes=$NNODES --nproc_per_node=$n_gpu --master_addr=$RANK0_IP --master_port=$MASTER_PORT --node_rank=${NODE_RANK:-0}"
 else
     LAUNCH_ARGS="--nproc_per_node=$n_gpu --master_port=$MASTER_PORT"
 fi
