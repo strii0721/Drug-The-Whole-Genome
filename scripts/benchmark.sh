@@ -4,7 +4,8 @@ results_path="output/test_$TASK"  # auto-generated from TASK name
 batch_size=64
 
 # 临时用官方权重跑通验证；新训练权重到位后改回 drug_clip_re/checkpoint_best.pt
-weight_path="./resources/model_weights/drug_clip/6_folds/fold_0.pt"
+# weight_path="./resources/model_weights/drug_clip_re/checkpoint_best.pt"
+weight_path="./resources/model_weights/benchmark/litpcba_identity_90.pt"
 use_folds=False
 
 log_dir="output/benchmark"
@@ -20,5 +21,5 @@ CUDA_VISIBLE_DEVICES="0" python ./src/unimol/test.py --user-dir ./src/unimol "./
        --path $weight_path \
        --benchmark-data-dir ./data \
        --log-interval 100 --log-format simple \
-       --max-pocket-atoms 256 \
+       --max-pocket-atoms 511 \
        --test-task $TASK 2>&1 | tee $log_file

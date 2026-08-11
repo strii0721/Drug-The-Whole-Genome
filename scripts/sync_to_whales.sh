@@ -15,7 +15,9 @@ for w in "${WHALES[@]}"; do
     rsync -a --info=progress2 \
         --exclude='.git' \
         --exclude='logs/' \
+        --exclude='__pycache__/' \
         --exclude='resources/' \
+        --exclude='output/' \
         "$SRC" "$w:$DEST"
     echo "=== [$w] 完成 ==="
 done
