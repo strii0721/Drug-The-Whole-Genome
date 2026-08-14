@@ -32,7 +32,7 @@ finetune_mol_model="./resources/model_weights/unimol/mol_pre_no_h_220816.pt"
 finetune_pocket_model="./resources/model_weights/unimol/pocket_pre_220816.pt"
 
 # 双机全局 batch 对齐论文 144=72×2；GB10 128GB 显存充足
-batch_size=96
+batch_size=72
 batch_size_valid=128
 epoch=200
 dropout=0.0

@@ -1,11 +1,11 @@
-TASK="PCBA" # DUDE or PCBA
+TASK="DUDE" # DUDE or PCBA
 
 results_path="output/test_$TASK"  # auto-generated from TASK name
 batch_size=64
 
 # 临时用官方权重跑通验证；新训练权重到位后改回 drug_clip_re/checkpoint_best.pt
 # weight_path="./resources/model_weights/drug_clip_re/checkpoint_best.pt"
-weight_path="./resources/model_weights/benchmark/litpcba_identity_90.pt"
+weight_path="./resources/model_weights/benchmark/dude_ecfp_90.pt"
 use_folds=False
 
 log_dir="output/benchmark"
